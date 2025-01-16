@@ -39,28 +39,28 @@ from call_backs import *
 """# Set up"""
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--im_trains',  nargs='+',help='Name of the folder containing the image data')
-parser.add_argument('--im_vals', nargs='+', help='Name of the folder containing the image data')
-parser.add_argument('--pre_train', default='', help="Filename of the pretrained graph model")
-parser.add_argument('--mesh',  help='Name of the .dat file containing mesh info')
-parser.add_argument('--mesh_txt', nargs='+', help='Name of the mesh_info.txt file with tmplt scale and center into')
-parser.add_argument('--output',  help='Name of the output folder')
-parser.add_argument('--attr_trains', nargs='+', help='Attribute name of the folders containing tf records')
-parser.add_argument('--attr_vals', nargs='+', help='Attribute name of the folders containing tf records')
-parser.add_argument('--train_data_weights', type=float, nargs='+', help='Weights to apply for the samples in different datasets')
-parser.add_argument('--val_data_weights', type=float, nargs='+', help='Weights to apply for the samples in different datasets')
+parser.add_argument('--im_trains',  nargs='+',help='Name of the folder containing the image data', default='MMWHS/Training/m_train_preproc')
+parser.add_argument('--im_vals', nargs='+', help='Name of the folder containing the image data', default='MMWHS/Validation/m_val_preproc')
+parser.add_argument('--pre_train', help="Filename of the pretrained graph model", default='weights/weights_gcn.hdf5')
+parser.add_argument('--mesh',  help='Name of the .dat file containing mesh info', default='data/template/data_aux.dat')
+parser.add_argument('--mesh_txt', nargs='+', help='Name of the mesh_info.txt file with tmplt scale and center into', default='data/template/mesh_info_mr.txt')
+parser.add_argument('--output',  help='Name of the output folder', default='MMWHS')
+parser.add_argument('--attr_trains', nargs='+', help='Attribute name of the folders containing tf records', default='mr_train')
+parser.add_argument('--attr_vals', nargs='+', help='Attribute name of the folders containing tf records', default='mr_val')
+parser.add_argument('--train_data_weights', type=float, nargs='+', default=[1], help='Weights to apply for the samples in different datasets')
+parser.add_argument('--val_data_weights', type=float, nargs='+',default=[1], help='Weights to apply for the samples in different datasets')
 parser.add_argument('--file_pattern', default='*.tfrecords', help='Pattern of the .tfrecords files')
-parser.add_argument('--modality', nargs='+', help='Name of the modality, mr, ct, split by space')
-parser.add_argument('--num_epoch', type=int, help='Maximum number of epochs to run')
+parser.add_argument('--modality', nargs='+', help='Name of the modality, mr, ct, split by space', default='mr')
+parser.add_argument('--num_epoch', type=int, default=100, help='Maximum number of epochs to run')
 parser.add_argument('--num_seg', type=int,default=1, help='Number of segmentation classes')
-parser.add_argument('--seg_weight', type=float, default=1., help='Weight of the segmentation loss')
-parser.add_argument('--mesh_ids', nargs='+', type=int, default=[2], help='Number of meshes to train')
-parser.add_argument('--batch_size', type=int, default=10, help='Batch size')
+parser.add_argument('--seg_weight', type=float, default=100., help='Weight of the segmentation loss')
+parser.add_argument('--mesh_ids', nargs='+', type=int, default=[0, 1, 2, 3, 4, 5, 6], help='Number of meshes to train')
+parser.add_argument('--batch_size', type=int, default=1, help='Batch size')
 parser.add_argument('--shuffle_buffer_size', type=int, default=10000, help='Shuffle buffer size')
-parser.add_argument('--lr', type=float, help='Learning rate')
+parser.add_argument('--lr', type=float, help='Learning rate', default=0.001)
 parser.add_argument('--cf_ratio', type=float, default=1., help='Loss ratio between gt chamfer loss and pred chamfer loss')
-parser.add_argument('--size', type = int, nargs='+', help='Image dimensions')
-parser.add_argument('--weights', type = float, nargs='+', help='Loss weights for geometric loss')
+parser.add_argument('--size', type = int, nargs='+', default=[128, 128, 128], help='Image dimensions')
+parser.add_argument('--weights', type = float, nargs='+', default=np.array([0.29336324, 0.05, 0.46902252, 0.16859047]), help='Loss weights for geometric loss')
 parser.add_argument('--hidden_dim', type = int, default=128, help='Hidden dimension')
 parser.add_argument('--amplify_factor', type=float, default=1., help="amplify_factor of the predicted displacements")
 args = parser.parse_args()
@@ -76,7 +76,7 @@ try:
     os.makedirs(os.path.dirname(save_loss_path))
 except Exception as e: print(e)
 
-"""# Feed in mesh info"""
+""" Feed in mesh info"""
 
 pkl = pickle.load(open(args.mesh, 'rb'))
 mesh_info = construct_feed_dict(pkl)
@@ -84,14 +84,15 @@ mesh_info['mesh_center'] = [np.zeros(3) for i in range(len(args.mesh_ids))]
 mesh_info['mesh_scale'] = [0 for i in range(len(args.mesh_ids))]
 mesh_info['mesh_area'] = [0 for i in range(len(args.mesh_ids))]
 mesh_info['edge_length_scaled'] = [np.zeros(3) for i in range(len(args.mesh_ids))] # 3 is number of blocks
-for txt_fn in args.mesh_txt:
-    for i in range(len(args.mesh_ids)):
-        ctr_scale = np.loadtxt(txt_fn) 
-        if len(ctr_scale.shape)==1:
-            ctr_scale = np.expand_dims(ctr_scale, axis=0) 
-        mesh_info['mesh_center'][i] += ctr_scale[i, :-2]/len(args.modality)  
-        mesh_info['mesh_scale'][i] += ctr_scale[i, -2]/len(args.modality)  
-        mesh_info['mesh_area'][i] += ctr_scale[i, -1]/len(args.modality)
+
+txt_fn = args.mesh_txt
+for i in range(len(args.mesh_ids)):
+    ctr_scale = np.loadtxt(txt_fn)
+    if len(ctr_scale.shape)==1:
+        ctr_scale = np.expand_dims(ctr_scale, axis=0)
+    mesh_info['mesh_center'][i] += ctr_scale[i, :-2]/len(args.modality)
+    mesh_info['mesh_scale'][i] += ctr_scale[i, -2]/len(args.modality)
+    mesh_info['mesh_area'][i] += ctr_scale[i, -1]/len(args.modality)
 
 for i in range(len(args.mesh_ids)):
         r = mesh_info['mesh_scale'][i]*2
@@ -111,18 +112,35 @@ if_seg = True if args.num_seg>0 else False
 val_preprocessing_fn = functools.partial(_augment_deformnet)
 train_ds_list, val_ds_list = [], []
 train_ds_num, val_ds_num = [], []
-for data_folder_out, attr in zip(args.im_trains, args.attr_trains):
-    x_train_filenames_i = buildImageDataset(data_folder_out, args.modality, 41, mode='_train'+attr, ext=args.file_pattern)
-    train_ds_num.append(len(x_train_filenames_i))
-    train_ds_i = get_baseline_dataset_deformnet(x_train_filenames_i, preproc_fn=tr_preprocessing_fn, mesh_ids=args.mesh_ids, \
-            shuffle_buffer=args.shuffle_buffer_size, if_seg=if_seg)
-    train_ds_list.append(train_ds_i)
-for data_val_folder_out, attr in zip(args.im_vals, args.attr_vals):
-    x_val_filenames_i = buildImageDataset(data_val_folder_out, args.modality, 41, mode='_val'+attr, ext=args.file_pattern)
-    val_ds_num.append(len(x_val_filenames_i))
-    val_ds_i = get_baseline_dataset_deformnet(x_val_filenames_i, preproc_fn=val_preprocessing_fn, mesh_ids=args.mesh_ids, \
-            shuffle_buffer=args.shuffle_buffer_size, if_seg=if_seg)
-    val_ds_list.append(val_ds_i)
+
+#for data_folder_out, attr in zip(args.im_trains, args.attr_trains):
+x_train_filenames = buildImageDataset(args.im_trains, args.modality, 41, mode='mr'+'_train', ext=args.file_pattern)
+train_ds_num.append(len(x_train_filenames))
+train_ds = get_baseline_dataset_deformnet(x_train_filenames, preproc_fn=tr_preprocessing_fn, mesh_ids=args.mesh_ids, \
+        shuffle_buffer=args.shuffle_buffer_size, if_seg=if_seg)
+train_ds_list.append(train_ds)
+#for data_val_folder_out, attr in zip(args.im_vals, args.attr_vals):
+x_val_filenames = buildImageDataset(args.im_vals, args.modality, 41, mode='mr'+'_val', ext=args.file_pattern)
+val_ds_num.append(len(x_val_filenames))
+val_ds = get_baseline_dataset_deformnet(x_val_filenames, preproc_fn=val_preprocessing_fn, mesh_ids=args.mesh_ids, \
+        shuffle_buffer=args.shuffle_buffer_size, if_seg=if_seg)
+val_ds_list.append(val_ds)
+
+# for data_folder_out, attr in zip(args.im_trains, args.attr_trains):
+#     data_folder_out = args.im_trains
+#     x_train_filenames_i = buildImageDataset(data_folder_out, args.modality, 41, mode='mr'+'_train', ext=args.file_pattern)
+#     train_ds_num.append(len(x_train_filenames_i))
+#     train_ds_i = get_baseline_dataset_deformnet(x_train_filenames_i, preproc_fn=tr_preprocessing_fn, mesh_ids=args.mesh_ids, \
+#             shuffle_buffer=args.shuffle_buffer_size, if_seg=if_seg)
+#     train_ds_list.append(train_ds_i)
+# for data_val_folder_out, attr in zip(args.im_vals, args.attr_vals):
+#     data_val_folder_out = args.im_vals
+#     x_val_filenames_i = buildImageDataset(data_val_folder_out, args.modality, 41, mode='mr'+'_val', ext=args.file_pattern)
+#     val_ds_num.append(len(x_val_filenames_i))
+#     val_ds_i = get_baseline_dataset_deformnet(x_val_filenames_i, preproc_fn=val_preprocessing_fn, mesh_ids=args.mesh_ids, \
+#             shuffle_buffer=args.shuffle_buffer_size, if_seg=if_seg)
+#     val_ds_list.append(val_ds_i)
+
 train_data_weights = [w/np.sum(args.train_data_weights) for w in args.train_data_weights]
 val_data_weights = [w/np.sum(args.val_data_weights) for w in args.val_data_weights]
 print("Sampling probability for train and val datasets: ", train_data_weights, val_data_weights)

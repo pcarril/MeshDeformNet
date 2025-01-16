@@ -92,7 +92,9 @@ class DeformNet(object):
         
        features, mesh_coords, mesh_scale = inputs
        input_size = [float(i) for  i in list(self.input_size)]
-       output =  GraphConv(coord_dim, 384, act=tf.nn.relu,adjs=adjs[2])(mesh_coords)
+       adj = adjs[2][0]
+
+       output = GraphConv(coord_dim, 384, act=tf.nn.relu,adjs=adjs[2])(mesh_coords)
        output = Projection([3,4], input_size)([i for i in features]+[mesh_coords, output])
        output1, output_cat = self._graph_conv_block(output, adjs[2], output.get_shape().as_list()[-1], 288, coord_dim, 3)
        

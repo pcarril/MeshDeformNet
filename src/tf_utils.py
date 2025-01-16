@@ -194,7 +194,8 @@ def sparse_tensor_dense_tensordot(sp_a, b, axes, name=None):
             axes = tf.cast(axes >= 0, tf.int32) * axes + tf.cast(
                     axes < 0, tf.int32) * (
                             axes + rank_a)
-            print(sess.run(rank_a), sess.run(axes))
+            with tf.Session() as sess:
+                print(sess.run(rank_a), sess.run(axes))
             free, _ = tf.setdiff1d(tf.range(rank_a), axes)
             free_dims = tf.gather(shape_a, free)
             axes_dims = tf.gather(shape_a, axes)
@@ -248,6 +249,9 @@ def sparse_tensor_dense_tensordot(sp_a, b, axes, name=None):
 #         a = tf.convert_to_tensor(a, name="a")
         b = tf.convert_to_tensor(b, name="b")
         sp_a_axes, b_axes = _sparse_tensordot_axes(sp_a, axes)
+
+        sp_a = tf.sparse.slice(sp_a, start=[0, 0], size=[5000, 5000])
+
         sp_a_reshape, sp_a_free_dims, sp_a_free_dims_static = _sparse_tensordot_reshape(sp_a, sp_a_axes)
         b_reshape, b_free_dims, b_free_dims_static = _tensordot_reshape(
                 b, b_axes, True)

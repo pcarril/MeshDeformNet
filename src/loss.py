@@ -18,7 +18,7 @@ from tensorflow.python.keras import backend as K
 import numpy as np
 
 from tensorflow.python.framework import ops
-nn_distance_module=tf.load_op_library(os.path.join(os.path.dirname(__file__), '../external/tf_nndistance_so.so'))
+nn_distance_module=tf.load_op_library(os.path.join(os.path.dirname(__file__), '../external/stored/tf_nndistance_so.so'))
 
 def nn_distance(xyz1,xyz2):
     '''
@@ -31,6 +31,7 @@ def nn_distance(xyz1,xyz2):
     output: idx2:  (batch_size,#point_2)   nearest neighbor from second to first
     '''
     return nn_distance_module.nn_distance(xyz1,xyz2)
+
 @ops.RegisterShape('NnDistance')
 def _nn_distance_shape(op):
     shape1=op.inputs[0].get_shape().with_rank(3)

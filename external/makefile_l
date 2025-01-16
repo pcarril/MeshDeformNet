@@ -1,0 +1,18 @@
+nvcc = C:/Program\ Files/NVIDIA\ GPU\ Computing\ Toolkit/CUDA/v10.0/bin/nvcc.exe --compiler-bindir "C:/Program Files (x86)/Microsoft Visual Studio/2017/Community/VC/Tools/MSVC/14.16.2703/bin/Hostx64/x64"
+cudalib = C:/Program\ Files/NVIDIA\ GPU\ Computing\ Toolkit/CUDA/v10.0/lib/x64
+tensorflow = C:/Users/pcarril/Anaconda3/envs/MeshDeformNet2/Lib/site-packages/tensorflow/include
+TF_LIB = C:/Users/pcarril/Anaconda3/envs/MeshDeformNet2/Lib/site-packages/tensorflow
+
+all: tf_nndistance_so.dll tf_nndistance_g.cu.o
+
+tf_nndistance_so.dll: tf_nndistance_g.cu.o tf_nndistance.cpp
+	#g++ command to compile the shared library (this line should start with a tab)
+	g++ -std=c++11 tf_nndistance.cpp tf_nndistance_g.cu.o -o tf_nndistance_so.dll -shared -fPIC -I $(tensorflow) -lcudart -L $(cudalib) -O2 -L $(TF_LIB) -ltensorflow_framework
+
+tf_nndistance_g.cu.o: tf_nndistance_g.cu
+	#nvcc command to compile the CUDA file (this line should start with a tab)
+	$(nvcc) -D_GLIBCXX_USE_CXX11_ABI=0 -std=c++11 -c -o tf_nndistance_g.cu.o tf_nndistance_g.cu -I $(tensorflow) -DGOOGLE_CUDA=1 -x cu -Xcompiler -fPIC -O2
+
+clean:
+	del tf_nndistance_so.dll
+	del *.cu.o

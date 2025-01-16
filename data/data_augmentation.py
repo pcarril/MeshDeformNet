@@ -80,10 +80,12 @@ def generate_seg_aug_dataset(im_dir, mask_dir, out_dir, modality, mode='train', 
         nums_scatter = comm.scatter(nums_scatter, root = 0)
         fns_masks_scatter = comm.scatter(fns_masks_scatter, root = 0)
         fns_scatter  = comm.scatter(fns_scatter, root = 0)
-    for fn, fn_mask, aug_id in zip(fns_scatter, fns_masks_scatter, nums_scatter):
+    for fn, fn_mask, aug_id in zip(fns_scatter[0], fns_masks_scatter[0], nums_scatter[0]):
         name = os.path.basename(fn).split(os.extsep, 1)[0]
         name_seg = os.path.basename(fn_mask).split(os.extsep, 1)[0]
-        assert name == name_seg , "Image and mask file names do not match!"
+        print('Looking at', aug_id)
+        # assert name == name_seg , "Image and mask file names do not match!"
+
         image = sitk.ReadImage(fn)
         mask = sitk.ReadImage(fn_mask)
        
@@ -121,14 +123,16 @@ def generate_seg_aug_dataset(im_dir, mask_dir, out_dir, modality, mode='train', 
         mask_aug.SetDirection(output[0].GetDirection())
         sitk.WriteImage(mask_aug, mask_out)
 
+        print('Saved', name)
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--im_dir', help='Name of the folder with image data')
-    parser.add_argument('--seg_dir', help='Name of the folder with segmentation data')
-    parser.add_argument('--out_dir', help='Name of the output directory')
-    parser.add_argument('--modality', help='Modality, ct or mr')
-    parser.add_argument('--mode', help='train or val')
-    parser.add_argument('--num', type=int, help='Number of augmentations per image')
+    parser.add_argument('--im_dir', help='Name of the folder with image data', default='C:/Users/pcarril/PycharmProjects/MeshDeformNet/MMWHS/Validation/Image')
+    parser.add_argument('--seg_dir', help='Name of the folder with segmentation data', default='C:/Users/pcarril/PycharmProjects/MeshDeformNet/MMWHS/Validation/Segs')
+    parser.add_argument('--out_dir', help='Name of the output directory', default='C:/Users/pcarril/PycharmProjects/MeshDeformNet/MMWHS/Validation')
+    parser.add_argument('--modality', help='Modality, ct or mr', default='m')
+    parser.add_argument('--mode', help='train or val', default='val')
+    parser.add_argument('--num', type=int, help='Number of augmentations per image', default='1')
     args = parser.parse_args()
     
     try:

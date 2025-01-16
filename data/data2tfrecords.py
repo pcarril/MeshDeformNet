@@ -15,7 +15,12 @@
 import os
 import glob
 import sys
-sys.path.append(os.path.join(os.path.dirname(__file__), "../src")) 
+
+from src.utils import smooth_polydata, decimation, bound_polydata_by_image, vtk_marching_cube, build_transform_matrix, \
+    exportSitk2VTK, visualize_polydata, get_point_normals, natural_sort, get_poly_surface_area, appendPolyData, \
+    data_to_tfrecords
+
+sys.path.append(os.path.join(os.path.dirname(__file__), "../src"))
 import numpy as np
 import SimpleITK as sitk
 import tensorflow as tf
@@ -27,14 +32,14 @@ import argparse
 
 def parse():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--folder', help='Name of the folder containing the image data')
-    parser.add_argument('--modality', nargs='+', help='Name of the modality, mr, ct, split by space')
-    parser.add_argument('--size', nargs='+', type=int, help='Image dimensions')
-    parser.add_argument('--folder_postfix', nargs='?', default='_train', help='Folder postfix of the folder to look for')
-    parser.add_argument('--out_folder', help='Name of the output folder')
+    parser.add_argument('--folder', help='Name of the folder containing the image data', default='C:/Users/pcarril/PycharmProjects/MeshDeformNet/MMWHS/Validation')
+    parser.add_argument('--modality', nargs='+', help='Name of the modality, mr, ct, split by space', default='m')
+    parser.add_argument('--size', nargs='+', type=int, help='Image dimensions', default=[128, 128, 128])
+    parser.add_argument('--folder_postfix', nargs='?', default='_val', help='Folder postfix of the folder to look for')
+    parser.add_argument('--out_folder', help='Name of the output folder', default='C:/Users/pcarril/PycharmProjects/MeshDeformNet/MMWHS/Validation/Preprocessed')
     parser.add_argument('--deci_rate', type=float, default=0., help='Decimation rate of ground truth mesh')
     parser.add_argument('--smooth_iter', type=int, default=50, help='Smoothing iterations for GT mesh')
-    parser.add_argument('--seg_id', default=[], type=int, nargs='+', help='List of segmentation ids to apply marching cube')
+    parser.add_argument('--seg_id', default=[1, 2, 3, 4, 5, 6, 7], type=int, nargs='+', help='List of segmentation ids to apply marching cube')
     parser.add_argument('--aug_num', type=int, default=0, help='Number of crop augmentation')
     parser.add_argument('--intensity',nargs='+', type=int, default=[750,-750], help='Intensity range to clip to [upper, lower]')
     args = parser.parse_args()
@@ -46,7 +51,7 @@ def map_polydata_coords(poly, displacement, transform, size):
     coords = np.concatenate((coords,np.ones((coords.shape[0],1))), axis=-1) 
     coords = np.matmul(np.linalg.inv(transform), coords.transpose()).transpose()[:,:3]
     scale = np.array([128, 128, 128])/np.array(size)
-    coords *=scale
+    coords *= scale
     return coords
 
 def transform_polydata(poly, displacement, transform, size):
@@ -68,15 +73,20 @@ def process_image(image, mask, size, m, intensity, seg_id, deci_rate, smooth_ite
     seg_py = swapLabels_ori(sitk.GetArrayFromImage(mask).transpose(2, 1, 0).astype(np.int64))
     segVol_swap = sitk.GetImageFromArray(seg_py.transpose(2,1,0).astype(np.uint8))
     segVol_swap.CopyInformation(mask)
+
     mesh_all_list, mesh_all_py_list = [], []
     segVol_swap_vtk = exportSitk2VTK(segVol_swap, spacing=[1.5,1.5,1.5])[0]
+
     for s, s_id in enumerate(seg_id):
-        mesh = smooth_polydata(vtk_marching_cube(segVol_swap_vtk, 0, s_id), iteration=smooth_iter) 
+
+        mesh = vtk_marching_cube(segVol_swap_vtk, 0, s_id)
+        mesh = smooth_polydata(mesh, iteration=smooth_iter)
         mesh = bound_polydata_by_image(segVol_swap_vtk, mesh, 1.5)
         mesh = decimation(mesh, deci_rate)
         mesh_py, mesh_poly = transform_polydata(mesh, img_center2-img_center, transform, size)
         mesh_all_list.append(mesh_poly)
         mesh_all_py_list.append(mesh_py)
+
     # write GT files to disk
     segVol = resample_spacing(mask, template_size=size, order=0)[0]
     seg_py = swapLabels_ori(sitk.GetArrayFromImage(segVol).transpose(2, 1, 0).astype(np.int64))
@@ -94,7 +104,7 @@ def process_image_w_random_crops(image, mask, size, m, intensity, seg_id, deci_r
     tfrecords[2] = swapLabels_ori(sitk.GetArrayFromImage(segVol).transpose(2, 1, 0).astype(np.int64))
     return tfrecords, mesh_all_list, (cropped, mask)
 
-def data_preprocess(modality,data_folder, data_folder_out, fn, intensity, size, seg_id, deci_rate, smooth_iter, aug_num=0):
+def data_preprocess(modality, data_folder, data_folder_out, fn, intensity, size, seg_id, deci_rate, smooth_iter, aug_num=0):
     for m in modality:
         imgVol_fn , seg_fn = [], []
         for subject_dir in natural_sort(glob.glob(os.path.join(data_folder,m+fn,'*.nii.gz')) \

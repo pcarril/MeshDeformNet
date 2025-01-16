@@ -178,8 +178,8 @@ def exportSitk2VTK(sitkIm,spacing=None):
         sitkIm: simple itk image
     Returns:
         imageData: vtk image
-import SimpleITK as sitk
     """
+
     if not spacing:
         spacing = sitkIm.GetSpacing()
     import SimpleITK as sitk
@@ -400,19 +400,26 @@ def load_vtk(fn, clean=True,num_mesh=1):
 
     return mesh
 
-def buildImageDataset(data_folder_out, modality, seed, mode='_train', ext='*.tfrecords'):
+
+def buildImageDataset(data_folder_out, modality, seed, mode='_train', ext='*.nii.tfrecords'):
     import random
-    x_train_filenames = []
-    filenames = [None]*len(modality)
-    nums = np.zeros(len(modality))
-    for i, m in enumerate(modality):
-        filenames[i] = glob.glob(os.path.join(data_folder_out, m+mode,ext))
-        nums[i] = len(filenames[i])
-        x_train_filenames+=filenames[i]
-        #shuffle
-        random.shuffle(x_train_filenames)
-    random.shuffle(x_train_filenames)      
-    print("Number of images obtained for training and validation: " + str(nums))
+    # Set the directory where your files are stored
+    data_directory = data_folder_out  # Replace with the actual path to your folder
+
+    # Construct the full pattern for matching files in the directory
+    pattern = os.path.join(data_directory, f'{mode}_*{ext}')
+
+    # Use glob to collect all matching files
+    x_train_filenames = glob.glob(pattern)
+
+    # Shuffle files for randomness if needed
+    random.seed(seed)
+    random.shuffle(x_train_filenames)
+
+    # Count files for each modality (if required)
+    nums = [len(x_train_filenames)] * len(modality)  # Adjust if each modality has a different count
+
+    print("Number of images obtained for training and validation:", nums)
     return x_train_filenames
 
 def construct_feed_dict(pkl):
@@ -519,11 +526,29 @@ def data_to_tfrecords(X, Y, S,transform, spacing, file_path_prefix=None, verbose
 
 def vtk_marching_cube(vtkLabel, bg_id, seg_id, smooth=None):
     import vtk
+
+    # seg_ids_real = np.array([0, 1, 2, 3, 4, 5, 6, 7])
+    # if seg_id == 205:
+    #     seg_id = 1
+    # elif seg_id == 420:
+    #     seg_id = 2
+    # elif seg_id == 500:
+    #     seg_id = 3
+    # elif seg_id == 550:
+    #     seg_id = 4
+    # elif seg_id == 600:
+    #     seg_id = 5
+    # elif seg_id == 820:
+    #     seg_id = 6
+    # elif seg_id == 850:
+    #     seg_id = 7
+
     contour = vtk.vtkDiscreteMarchingCubes()
     contour.SetInputData(vtkLabel)
     contour.SetValue(0, seg_id)
     contour.Update()
     mesh = contour.GetOutput()
+    #print(f"points: {mesh.GetNumberOfPoints()}")
 
     return mesh
 
@@ -663,3 +688,35 @@ def get_point_normals(poly):
     pt_norm = poly.GetPointData().GetArray("Normals")
     from vtk.util.numpy_support import vtk_to_numpy
     return vtk_to_numpy(pt_norm)
+
+
+def visualize_polydata(polydata, title="Visualization"):
+    import vtk
+    # Create a mapper for the vtkPolyData (mesh)
+    mapper = vtk.vtkPolyDataMapper()
+    mapper.SetInputData(polydata)
+
+    # Create an actor to represent the polydata in the scene
+    actor = vtk.vtkActor()
+    actor.SetMapper(mapper)
+
+    # Create the renderer, render window, and interactor
+    renderer = vtk.vtkRenderer()
+    render_window = vtk.vtkRenderWindow()
+    render_window.AddRenderer(renderer)
+
+    render_window_interactor = vtk.vtkRenderWindowInteractor()
+    render_window_interactor.SetRenderWindow(render_window)
+
+    # Add the actor to the renderer
+    renderer.AddActor(actor)
+
+    # Set background color
+    renderer.SetBackground(0.1, 0.2, 0.4)  # Dark blue background
+
+    # Set window title
+    render_window.SetWindowName(title)
+
+    # Render and start interaction
+    render_window.Render()
+    render_window_interactor.Start()
